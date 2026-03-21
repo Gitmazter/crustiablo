@@ -17,6 +17,22 @@ enum Tile {
     Floor,
 }
 
+//Monsters
+struct Monster {
+    x: usize,
+    y:usize,
+    hp:i32,
+    cd: f32,
+}
+
+//Floating Text
+struct DmgText {
+    x: f32, 
+    y: f32,
+    dmg: i32,
+    life: f32,
+}
+
 //Math Helper
 fn to_screen(x: usize, y: usize, cam: (f32, f32)) -> (f32, f32) {
     (
@@ -73,14 +89,20 @@ fn bfs(
 }
 
 //draw hero and monsters
-fn draw_stickman(x: usize, y: usize, cam: (f32, f32)) {
+fn draw_stickman(x: usize, y: usize, cam: (f32, f32), enemy: bool) {
     let (sx, mut sy) = to_screen(x, y, cam);
     sy += 16.;
 
     // shadow
     draw_ellipse(sx, sy+3., 10., 5., 0.,Color::new(0.,0.,0.,0.2));
     //head
-    draw_circle_lines(sx, sy-32., 7., 2., BLACK);
+    if enemy {
+        draw_line(sx-5., sy - 32., sx, sy-30., 2., BLACK);
+        draw_line(sx+5., sy - 32., sx, sy-30., 2., BLACK);
+    } else {
+        //player
+        draw_circle_lines(sx, sy-32., 7., 2., BLACK);
+    }
     //body and limbs
     for l in [
         [0.,-25.,0.,-8.],
@@ -134,12 +156,14 @@ fn draw_wall(x: usize, y: usize, cam: (f32, f32)) {
 }
 
 struct Game {
-    map: [[Tile;MAP];MAP],
+    map: [[Tile; MAP]; MAP],
     cam: (f32, f32),
     px: usize,
     py: usize,
     path: Vec<(usize, usize)>,
-    player_cd : f32,
+    player_cd: f32,
+    monsters: Vec<Monster>,
+    texts: Vec<DmgText>,
 }
 
 impl Game {
@@ -165,12 +189,26 @@ impl Game {
             py: 2,
             path: vec![],
             player_cd: 0.,
+            monsters: vec![
+                Monster{x:8,y:8,hp:30,cd:0.},
+                Monster{x:12,y:4,hp:30,cd:0.},
+                Monster{x:15,y:12,hp:30,cd:0.},
+            ],
+            texts:  vec![]
         }
     }
     fn update(&mut self, dt:f32) -> bool {
         if is_key_pressed(KeyCode::Space) {
             return  true;
         }
+
+        //update text animations
+        self.texts.retain_mut(|t| {
+            t.life -= dt;
+            t.y -= 20. * dt;
+            t.life > 0.
+        });
+
         if is_mouse_button_pressed(MouseButton::Left) {
             let (mx, my) = mouse_position();
             let (tx, ty) = to_tile(mx, my, self.cam);
@@ -184,18 +222,51 @@ impl Game {
         // handle movement 
         if !self.path.is_empty() {
             self.player_cd -= dt;
+            // time to move?
             if self.player_cd <= 0. {
                 self.player_cd = 0.15;
 
-                let next_step = self.path[0];
-                self.px = next_step.0;
-                self.py = next_step.1;
-                self.path.remove(0);
+                let (nx, ny) = self.path[0];
+
+                // Combat logic for the player
+                if let Some(i) = self.monsters.iter().position(|m| m.x ==nx && m.y == ny) {
+                    //attack
+                    self.damage_monster(i, 10);
+                    // stop moving 
+                    self.path.clear();
+                } else {
+                    //move
+                    self.path.remove(0);
+                    self.px = nx;
+                    self.py = ny;
+                }
+
             }
         }
 
         false
     }
+
+    fn damage_monster(&mut self, idx: usize, amount: i32) {
+        self.monsters[idx].hp -= amount;
+
+        // spawn text
+        let (sx, sy) = to_screen(self.px, self.py, self.cam);
+        self.texts.push(DmgText {
+            x: sx,
+            y: sy - 40.,
+            dmg: amount,
+            life: 1.,
+        });
+
+
+        // kill logic
+        if self.monsters[idx].hp <= 0 {
+            self.monsters.remove(idx);
+        }
+
+    }
+
     fn draw(&self) {
         for y in 0..MAP {
             for x in 0..MAP {
@@ -214,7 +285,18 @@ impl Game {
             }
 
             //draw the player
-            draw_stickman(self.px, self.py, self.cam);
+            draw_stickman(self.px, self.py, self.cam, false);
+
+            //draw Monsters
+            for m in &self.monsters {
+                draw_stickman(m.x, m.y, self.cam, true);
+            }
+
+
+            //draw floating text 
+            for t in &self.texts {
+                draw_text(&format!("-{}", t.dmg), t.x, t.y, 20., RED);
+            }
         }
     }
 }
