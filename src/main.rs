@@ -138,7 +138,8 @@ struct Game {
     cam: (f32, f32),
     px: usize,
     py: usize,
-    path: Vec<(usize, usize)>
+    path: Vec<(usize, usize)>,
+    player_cd : f32,
 }
 
 impl Game {
@@ -162,10 +163,11 @@ impl Game {
             cam: (screen_width() /2., 50.),
             px: 2,
             py: 2,
-            path: vec![]
+            path: vec![],
+            player_cd: 0.,
         }
     }
-    fn update(&mut self, _dt:f32) -> bool {
+    fn update(&mut self, dt:f32) -> bool {
         if is_key_pressed(KeyCode::Space) {
             return  true;
         }
@@ -178,6 +180,20 @@ impl Game {
                 self.path = bfs(&self.map, (self.px, self.py), (tx, ty));
             }
         }
+
+        // handle movement 
+        if !self.path.is_empty() {
+            self.player_cd -= dt;
+            if self.player_cd <= 0. {
+                self.player_cd = 0.15;
+
+                let next_step = self.path[0];
+                self.px = next_step.0;
+                self.py = next_step.1;
+                self.path.remove(0);
+            }
+        }
+
         false
     }
     fn draw(&self) {
