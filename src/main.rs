@@ -2,7 +2,7 @@
 use macroquad::prelude::*;
 use std::collections::VecDeque;
 
-const MAP: usize = 18;
+const MAP: usize = 19;
 const T_SIZE: (f32, f32) = (32., 16.);
 
 enum AppState {
@@ -170,6 +170,8 @@ struct Game {
     monsters: Vec<Monster>,
     texts: Vec<DmgText>,
     hp: i32,
+    gold: Vec<(usize, usize)>,
+    score: i32,
 }
 
 impl Game {
@@ -202,11 +204,13 @@ impl Game {
             ],
             texts:  vec![],
             hp: 100,
+            score: 0,
+            gold: vec![(3,3),(10,2),(16,5),(6,14),(17,17)]
         }
     }
     fn update(&mut self, dt:f32) -> bool {
         // Death condition
-        if self.hp <= 0 {
+        if self.hp <= 0 || self.monsters.is_empty() {
             return true;
         }
 
@@ -247,6 +251,15 @@ impl Game {
                     self.path.remove(0);
                     self.px = nx;
                     self.py = ny;
+
+                    // gold pickup
+                    if let Some(i) = self.gold.iter().position(|&g| g == (self.px, self.py)) {
+                        self.gold.remove(i);
+                        self.score += 100;
+                        // spawn green text
+                        let (sx, sy) = to_screen(self.px, self.py, self.cam);
+                        self.texts.push(DmgText { x: sx, y: sy-40., dmg: -100, life: 1. });
+                    }
                 }
 
             }
@@ -317,6 +330,14 @@ impl Game {
         // kill logic
         if self.monsters[idx].hp <= 0 {
             self.monsters.remove(idx);
+            // +50 score if monster dies
+            self.score += 50;
+            self.texts.push(DmgText {
+            x: sx,
+            y: sy - 40.,
+            dmg: -50,
+            life: 1.,
+        });
         }
 
     }
@@ -327,8 +348,13 @@ impl Game {
                 if self.map[y][x] == Tile::Wall {
                     draw_wall(x, y, self.cam);
                 } else {
-                    let (sx, sy) = to_screen(x, y, self.cam);
-                    draw_circle(sx, sy + 16., 2., LIGHTGRAY);
+                    if self.gold.contains(&(x, y)) {
+                        let (sx, sy) = to_screen(x, y, self.cam);
+                        draw_circle(sx, sy+16., 6., GOLD);
+                    } {
+                        let (sx, sy) = to_screen(x, y, self.cam);
+                        draw_circle(sx, sy + 16., 2., LIGHTGRAY);
+                    }
                 }
             }
 
@@ -349,11 +375,16 @@ impl Game {
 
             //draw floating text 
             for t in &self.texts {
-                draw_text(&format!("-{}", t.dmg), t.x, t.y, 20., RED);
+                if t.dmg > 0 {
+                    draw_text(&format!("-{}", t.dmg), t.x, t.y, 20., RED);
+                } else {
+                    draw_text(&format!("+{}", -t.dmg), t.x, t.y, 20., GREEN);
+                }
             }
 
             // HUD 
             draw_text(&format!("HP: {}", self.hp), 20., screen_height()-40., 30., BLACK);
+            draw_text(&format!("SCORE: {}", self.score), 20., screen_height()-70., 30., BLACK);
         }
     }
 }
@@ -384,9 +415,18 @@ async fn main() {
             AppState::GameOver => {
                 game.draw();
                 draw_rectangle(0., 0., screen_width(), screen_height(), Color::new(1.,1.,1., 0.7));
-                draw_text("GAME OVER", 100., 100., 40.,RED);
-                draw_text(&format!("HP: {}", game.hp), 100., 160., 30.,BLACK);
-                draw_text("Press Enter to reset", 100., 190., 20.,GRAY);
+
+                if game.hp > 0 || game.monsters.is_empty() {
+                    // Victory 
+                    draw_text("VICTORY!", 100., 100., 40.,RED);
+                    draw_text(&format!("Final Score: {}", game.score), 100., 160., 30.,BLACK);
+                    draw_text(&format!("Final HP: {}", game.hp), 100., 200., 30.,BLACK);
+                    draw_text("Press Enter to reset", 100., 240., 20.,GRAY);
+                } else {
+                    // Defeat
+                    draw_text("YOU DIED", 100., 100., 40.,RED);
+                    draw_text("Press Enter to reset", 100., 150., 20.,GRAY);
+                }
 
                 if is_key_pressed(KeyCode::Enter) {
                     state = AppState::Menu
