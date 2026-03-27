@@ -243,7 +243,7 @@ impl Game {
                 // Combat logic for the player
                 if let Some(i) = self.monsters.iter().position(|m| m.x ==nx && m.y == ny) {
                     //attack
-                    self.damage_monster(i, 10);
+                    self.damage_monster(i, 5);
                     // stop moving 
                     self.path.clear();
                 } else {
